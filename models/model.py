@@ -52,85 +52,85 @@ class Model () :
         x = GatedConvolution (channels=channels, kernel_size=3, stride=1, dilation=1, padding='same', activation='ELU') (x)
         coarse_out = GatedConvolution (channels=3, kernel_size=3, stride=1, dilation=1, padding='same', activation=None) (x)
         
-        # Refine Network
+#         # Refine Network
 
-        x = coarse_out * input_mask + input_img * (1 - input_mask)
-        x = tf.keras.layers.Concatenate () ([x, input_mask])
-        x = GatedConvolution (
-            channels=channels,
-            kernel_size=7,
-            stride=1,
-            dilation=1,
-            padding='same',
-            activation='ELU'
-        ) (x)
+#         x = coarse_out * input_mask + input_img * (1 - input_mask)
+#         x = tf.keras.layers.Concatenate () ([x, input_mask])
+#         x = GatedConvolution (
+#             channels=channels,
+#             kernel_size=7,
+#             stride=1,
+#             dilation=1,
+#             padding='same',
+#             activation='ELU'
+#         ) (x)
 
-        # Encoder For Refine Network
-        skip_connections = []
-        downsamples = 4
-        current_image_height = input_height
-        current_image_width = input_width
-        for i in range (1, downsamples+1) :
-            x = GatedConvolution (channels=channels * (2**i), kernel_size=3, stride=2, dilation=1, padding='same', activation='ELU') (x)
-            current_image_height = current_image_height // 2
-            current_image_width = current_image_width // 2
+#         # Encoder For Refine Network
+#         skip_connections = []
+#         downsamples = 4
+#         current_image_height = input_height
+#         current_image_width = input_width
+#         for i in range (1, downsamples+1) :
+#             x = GatedConvolution (channels=channels * (2**i), kernel_size=3, stride=2, dilation=1, padding='same', activation='ELU') (x)
+#             current_image_height = current_image_height // 2
+#             current_image_width = current_image_width // 2
 
-            dilation_rate = 1
-            count = 2
-            if i == downsamples - 1 :
-                dilation_rate = 2
-                count = 3
+#             dilation_rate = 1
+#             count = 2
+#             if i == downsamples - 1 :
+#                 dilation_rate = 2
+#                 count = 3
             
-            for j in range (count) :
-                x = GatedConvolution (channels=channels*(2**i), kernel_size=3, stride=1, dilation=dilation_rate, padding='same', activation='ELU') (x)
+#             for j in range (count) :
+#                 x = GatedConvolution (channels=channels*(2**i), kernel_size=3, stride=1, dilation=dilation_rate, padding='same', activation='ELU') (x)
 
-            if i != downsamples :
-                skip_connections.append (list([x, channels*(2**(i-1)), current_image_height, current_image_width]))
+#             if i != downsamples :
+#                 skip_connections.append (list([x, channels*(2**(i-1)), current_image_height, current_image_width]))
 
-        # Apply Hypergraph convolution on last skip connections
-        for i in range (len(skip_connections)-1, len(skip_connections)-3, -1) :
-            mult = 1
-            if i == len(skip_connections)-1 :
-                mult = 2
-            skip_connections[i][0] = HypergraphConv(
-                in_features=skip_connections[i][1],
-                out_features=skip_connections[i][1] * mult,
-                features_height=skip_connections[i][2],
-                features_width=skip_connections[i][3],
-                edges=256,
-                filters=128,
-                apply_bias=True,
-                trainable=True
-            ) (skip_connections[i][0])
+#         # Apply Hypergraph convolution on last skip connections
+#         for i in range (len(skip_connections)-1, len(skip_connections)-3, -1) :
+#             mult = 1
+#             if i == len(skip_connections)-1 :
+#                 mult = 2
+#             skip_connections[i][0] = HypergraphConv(
+#                 in_features=skip_connections[i][1],
+#                 out_features=skip_connections[i][1] * mult,
+#                 features_height=skip_connections[i][2],
+#                 features_width=skip_connections[i][3],
+#                 edges=256,
+#                 filters=128,
+#                 apply_bias=True,
+#                 trainable=True
+#             ) (skip_connections[i][0])
 
-            skip_connections[i][0] = tf.keras.layers.ELU () (skip_connections[i][0])
+#             skip_connections[i][0] = tf.keras.layers.ELU () (skip_connections[i][0])
 
-        # Doing the first Deconvolution operation
-        x = GatedDeConvolution (channels=channels * (2**(downsamples-1)), kernel_size=3, stride=1, dilation=1, padding='same', activation='ELU') (x)
-        x = tf.keras.layers.Concatenate () ([x, skip_connections[len(skip_connections)-1][0]])
+#         # Doing the first Deconvolution operation
+#         x = GatedDeConvolution (channels=channels * (2**(downsamples-1)), kernel_size=3, stride=1, dilation=1, padding='same', activation='ELU') (x)
+#         x = tf.keras.layers.Concatenate () ([x, skip_connections[len(skip_connections)-1][0]])
 
-        # Decoder for Refine Network
-        current = len (skip_connections) - 2
-        for i in range (downsamples-1, 0, -1) :
-            dilation_rate = 1
-            count = 2
-            if i == downsamples - 1 :
-                dilation_rate = 2
-                count = 3
+#         # Decoder for Refine Network
+#         current = len (skip_connections) - 2
+#         for i in range (downsamples-1, 0, -1) :
+#             dilation_rate = 1
+#             count = 2
+#             if i == downsamples - 1 :
+#                 dilation_rate = 2
+#                 count = 3
 
-            for j in range (count) :
-                x = GatedConvolution (channels=channels*(2**i), kernel_size=3, stride=1, dilation=dilation_rate, padding='same', activation='ELU') (x)
+#             for j in range (count) :
+#                 x = GatedConvolution (channels=channels*(2**i), kernel_size=3, stride=1, dilation=dilation_rate, padding='same', activation='ELU') (x)
 
-            x = GatedDeConvolution (channels=channels*(2**(i-1)), kernel_size=3, stride=1, dilation=1, padding='same', activation='ELU') (x)
-            if current != -1 :
-                x = tf.keras.layers.Concatenate () ([x, skip_connections[current][0]])
-                current -= 1
+#             x = GatedDeConvolution (channels=channels*(2**(i-1)), kernel_size=3, stride=1, dilation=1, padding='same', activation='ELU') (x)
+#             if current != -1 :
+#                 x = tf.keras.layers.Concatenate () ([x, skip_connections[current][0]])
+#                 current -= 1
 
-        x = GatedConvolution (channels=channels, kernel_size=3, stride=1, dilation=1, padding='same', activation='ELU') (x)
-        x = GatedConvolution (channels=channels, kernel_size=3, stride=1, dilation=1, padding='same', activation='ELU') (x)
-        refine_out = GatedConvolution (channels=3, kernel_size=3, stride=1, dilation=1, padding='same', activation=None) (x)
+#         x = GatedConvolution (channels=channels, kernel_size=3, stride=1, dilation=1, padding='same', activation='ELU') (x)
+#         x = GatedConvolution (channels=channels, kernel_size=3, stride=1, dilation=1, padding='same', activation='ELU') (x)
+#         refine_out = GatedConvolution (channels=3, kernel_size=3, stride=1, dilation=1, padding='same', activation=None) (x)
 
-        return tf.keras.Model (inputs=[input_img, input_mask], outputs=[coarse_out, refine_out])
+        return tf.keras.Model (inputs=[input_img, input_mask], outputs=[coarse_out])
 
     def build_discriminator (self, image_height, image_width) :
         input_img = tf.keras.layers.Input (shape=[image_height, image_width, 3])
